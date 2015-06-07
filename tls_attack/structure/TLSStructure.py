@@ -16,161 +16,161 @@ class OrderedMeta(type):
         return c
 
 class TLSStructure(metaclass = OrderedMeta):
-	# Unserializes the raw bytes into the type specified.
-	def _parseType(self, type, type_ref, type_enum, type_list, data):
+    # Unserializes the raw bytes into the type specified.
+    def _parseType(self, type, type_ref, type_enum, type_list, data):
 
-		# Type references are made to implement the switch cases
-		# of the TLS specification. The type reference is an enum
-		# class that tells which identifier maps to which structure.
-		if type_ref:
-			type = type_ref(type).name
+        # Type references are made to implement the switch cases
+        # of the TLS specification. The type reference is an enum
+        # class that tells which identifier maps to which structure.
+        if type_ref:
+            type = type_ref(type).name
 
-		result = None
-		
-		if type == "int":
-			# Primitive type decoder for int
-			# Integer value are encoded as unsigned big endian number
-			result = int.from_bytes(data, byteorder='big', signed=False)
+        result = None
+        
+        if type == "int":
+            # Primitive type decoder for int
+            # Integer value are encoded as unsigned big endian number
+            result = int.from_bytes(data, byteorder='big', signed=False)
 
-		elif type == "bytes":
-			# Primitive type decoder for bytes
-			result = data
+        elif type == "bytes":
+            # Primitive type decoder for bytes
+            result = data
 
-		elif type == "enum":
-			# Primitive type decoder to map integer value to enumeration
-			value = int.from_bytes(data, byteorder='big', signed=False)
-			result = type_enum(value)
+        elif type == "enum":
+            # Primitive type decoder to map integer value to enumeration
+            value = int.from_bytes(data, byteorder='big', signed=False)
+            result = type_enum(value)
 
-		else:
-			# Load on demand the module required for the decoding
-			if not hasattr(tls_attack.structure, type):
-				__import__("tls_attack.structure." + type)
+        else:
+            # Load on demand the module required for the decoding
+            if not hasattr(tls_attack.structure, type):
+                __import__("tls_attack.structure." + type)
 
-			# If the type is a class, we resolve it and use it's decoder
-			type = getattr(getattr(tls_attack.structure, type), type)
+            # If the type is a class, we resolve it and use it's decoder
+            type = getattr(getattr(tls_attack.structure, type), type)
 
-			if type_list:
-				result = []
-				pointer = 0
+            if type_list:
+                result = []
+                pointer = 0
 
-				while pointer < len(data):
-					item = type()
-					length = item.decode(data[pointer:])
+                while pointer < len(data):
+                    item = type()
+                    length = item.decode(data[pointer:])
 
-					if length == 0:
-						break
+                    if length == 0:
+                        break
 
-					pointer += length
-					result.append(item)
+                    pointer += length
+                    result.append(item)
 
-			else:
-				result = type()
-				result.decode(data)
+            else:
+                result = type()
+                result.decode(data)
 
-		return result
+        return result
 
-	# Decodes the raw bytes provided into the current TLSStructure.
-	def decode(self, raw):
-		attributes = self._orderedKeys
-		pointer = 0
+    # Decodes the raw bytes provided into the current TLSStructure.
+    def decode(self, raw):
+        attributes = self._orderedKeys
+        pointer = 0
 
-		for name in attributes:
-			# Skip internal attributes which all have the pattern __.*__
-			if name[:2] == "__" and name[-2:] == "__":
-				continue
+        for name in attributes:
+            # Skip internal attributes which all have the pattern __.*__
+            if name[:2] == "__" and name[-2:] == "__":
+                continue
 
-			field = getattr(self, name)
+            field = getattr(self, name)
 
-			# Skips field which aren't TLSField
-			if type(field) is TLSField:
-				field_size = field.size.value(self)
-				field_type = field.type.value(self)
-				field_type_ref = field.type_ref
-				field_type_list = field.type_list
-				field_type_enum = field.type_enum
+            # Skips field which aren't TLSField
+            if type(field) is TLSField:
+                field_size = field.size.value(self)
+                field_type = field.type.value(self)
+                field_type_ref = field.type_ref
+                field_type_list = field.type_list
+                field_type_enum = field.type_enum
 
-				# Check if we have enough data, otherwise we just have the partial data
-				# and we can't parse the whole structure. For this cases, we just assume
-				# nothing could be decoded.
-				if len(raw) < pointer + field_size:
-					return 0
+                # Check if we have enough data, otherwise we just have the partial data
+                # and we can't parse the whole structure. For this cases, we just assume
+                # nothing could be decoded.
+                if len(raw) < pointer + field_size:
+                    return 0
 
-				field_data = raw[pointer : pointer + field_size]
-				field_value = self._parseType(field_type, field_type_ref, field_type_enum, field_type_list, field_data)
+                field_data = raw[pointer : pointer + field_size]
+                field_value = self._parseType(field_type, field_type_ref, field_type_enum, field_type_list, field_data)
 
-				setattr(self, name, field_value)
-				pointer += field_size
+                setattr(self, name, field_value)
+                pointer += field_size
 
-		return pointer
+        return pointer
 
-	# Encodes the current TLS Structure into raw bytes
-	def encode(self):
-		pass
+    # Encodes the current TLS Structure into raw bytes
+    def encode(self):
+        pass
 
 
-	# Produces a string representation of the TLSStructure element.
-	# This is meant to be used for debug purposes.
-	def __str__(self):
-		result = type(self).__name__ + " {\n"
-		attributes = self._orderedKeys
+    # Produces a string representation of the TLSStructure element.
+    # This is meant to be used for debug purposes.
+    def __str__(self):
+        result = type(self).__name__ + " {\n"
+        attributes = self._orderedKeys
 
-		for name in attributes:
-			# Skip internal attributes which all have the pattern __.*__
-			if name[:2] == "__":
-				continue
+        for name in attributes:
+            # Skip internal attributes which all have the pattern __.*__
+            if name[:2] == "__":
+                continue
 
-			field_value = getattr(self, name)
-			field_value_str = str(field_value)
+            field_value = getattr(self, name)
+            field_value_str = str(field_value)
 
-			if issubclass(type(field_value), TLSStructure):
-				result += " "*4 + name + " = "
-				lines = field_value_str.split("\n")
-				result += lines[0] + "\n"
+            if issubclass(type(field_value), TLSStructure):
+                result += " "*4 + name + " = "
+                lines = field_value_str.split("\n")
+                result += lines[0] + "\n"
 
-				for line in lines[1:-1]:
-					result += " "*4 + line + "\n"
+                for line in lines[1:-1]:
+                    result += " "*4 + line + "\n"
 
-				result += " " * 4 + "}\n"
+                result += " " * 4 + "}\n"
 
-			elif isinstance(field_value, list):
-				result += " "*4 + name + " = [ "
+            elif isinstance(field_value, list):
+                result += " "*4 + name + " = [ "
 
-				for item in field_value:
-					lines = str(item).split("\n")
-					result += lines[0] + "\n"
+                for item in field_value:
+                    lines = str(item).split("\n")
+                    result += lines[0] + "\n"
 
-					for line in lines[1:-1]:
-						result += " "*8 + line + "\n"
+                    for line in lines[1:-1]:
+                        result += " "*8 + line + "\n"
 
-					result += " "*8	 + "}, "
+                    result += " "*8	 + "}, "
 
-				result += "\n" + " " * 4 + "]\n"
-			else:
-				result += " "*4 + name + " = " + field_value_str + "\n"
+                result += "\n" + " " * 4 + "]\n"
+            else:
+                result += " "*4 + name + " = " + field_value_str + "\n"
 
-		result += "}"
-		return result
+        result += "}"
+        return result
 
 class TLSField:
-	def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None):
-		self.size = TLSFieldValue(size) if not callable(getattr(size, "value", None)) else size
-		self.type = TLSFieldValue(type) if not callable(getattr(type, "value", None)) else type
-		self.type_ref = type_ref
-		self.type_list = type_list
-		self.type_enum = type_enum
-		self.value = None
+    def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None):
+        self.size = TLSFieldValue(size) if not callable(getattr(size, "value", None)) else size
+        self.type = TLSFieldValue(type) if not callable(getattr(type, "value", None)) else type
+        self.type_ref = type_ref
+        self.type_list = type_list
+        self.type_enum = type_enum
+        self.value = None
 
 class TLSFieldValue:
-	def __init__(self, value):
-		self._value = value
+    def __init__(self, value):
+        self._value = value
 
-	def value(self, obj):
-		return self._value
+    def value(self, obj):
+        return self._value
 
 class TLSFieldRef:
-	def __init__(self, name):
-		self.name = name
+    def __init__(self, name):
+        self.name = name
 
-	def value(self, obj):
-		ref_value = getattr(obj, self.name)
-		return ref_value
+    def value(self, obj):
+        ref_value = getattr(obj, self.name)
+        return ref_value
