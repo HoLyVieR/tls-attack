@@ -12,19 +12,64 @@ class OrderedMeta(type):
 
     def __new__(cls, name, bases, clsdict):
         c = type.__new__(cls, name, bases, clsdict)
-        c._orderedKeys = clsdict.keys()
+
+        keys = clsdict.keys()
+        c.static_attributes = []
+
+        for name in keys:
+            # Skip internal attributes which all have the pattern __.*__
+            if name[:2] == "__" and name[-2:] == "__":
+                continue
+
+            c.static_attributes.append(name)
+        
         return c
 
 class TLSStructure(metaclass = OrderedMeta):
+
+    # Returns the references to a TLS Structure class by it's name
+    def _get_tls_structure_by_name(self, type):
+        # Load on demand the module required for the decoding
+        if not hasattr(tls_attack.structure, type):
+            __import__("tls_attack.structure." + type)
+
+        # If the type is a class, we resolve it and use it's decoder
+        return getattr(getattr(tls_attack.structure, type), type)
+
+    # Serializes an object to raw bytes.
+    def _serialize_type(self, type, type_enum, type_list, type_size, obj):
+        result = b""
+
+        if type == "int":
+            # Primitive type encoder for int
+            # Integer value are encoded as unsigned big endian number
+            result = obj.to_bytes(type_size, byteorder='big')
+
+        elif type == "bytes":
+            # Primitive type encoder for bytes
+            result = obj
+
+        elif type == "enum":
+            # Primitive type decoder to map integer value to enumeration
+            result = obj.value.to_bytes(type_size, byteorder='big')
+
+        else:
+            type = self._get_tls_structure_by_name(type)
+
+            if type_list:
+                result = b""
+
+                for item in obj:
+                    result += item.encode()
+
+            else:
+                result = obj.encode()
+
+        return result
+
+
     # Unserializes the raw bytes into the type specified.
-    def _parseType(self, type, type_ref, type_enum, type_list, data):
-
-        # Type references are made to implement the switch cases
-        # of the TLS specification. The type reference is an enum
-        # class that tells which identifier maps to which structure.
-        if type_ref:
-            type = type_ref(type).name
-
+    def _unserialize_type(self, type, type_enum, type_list, data):
         result = None
         
         if type == "int":
@@ -42,12 +87,7 @@ class TLSStructure(metaclass = OrderedMeta):
             result = type_enum(value)
 
         else:
-            # Load on demand the module required for the decoding
-            if not hasattr(tls_attack.structure, type):
-                __import__("tls_attack.structure." + type)
-
-            # If the type is a class, we resolve it and use it's decoder
-            type = getattr(getattr(tls_attack.structure, type), type)
+            type = self._get_tls_structure_by_name(type)
 
             if type_list:
                 result = []
@@ -71,23 +111,15 @@ class TLSStructure(metaclass = OrderedMeta):
 
     # Decodes the raw bytes provided into the current TLSStructure.
     def decode(self, raw):
-        attributes = self._orderedKeys
         pointer = 0
 
-        for name in attributes:
-            # Skip internal attributes which all have the pattern __.*__
-            if name[:2] == "__" and name[-2:] == "__":
-                continue
-
-            field = getattr(self, name)
+        for name in self.static_attributes:
+            field = getattr(type(self), name)
 
             # Skips field which aren't TLSField
             if type(field) is TLSField:
                 field_size = field.size.value(self)
                 field_type = field.type.value(self)
-                field_type_ref = field.type_ref
-                field_type_list = field.type_list
-                field_type_enum = field.type_enum
 
                 # Check if we have enough data, otherwise we just have the partial data
                 # and we can't parse the whole structure. For this cases, we just assume
@@ -95,8 +127,14 @@ class TLSStructure(metaclass = OrderedMeta):
                 if len(raw) < pointer + field_size:
                     return 0
 
+                # Type references are made to implement the switch cases
+                # of the TLS specification. The type reference is an enum
+                # class that tells which identifier maps to which structure.
+                if field.type_ref:
+                    field_type = field.type_ref(field_type).name
+
                 field_data = raw[pointer : pointer + field_size]
-                field_value = self._parseType(field_type, field_type_ref, field_type_enum, field_type_list, field_data)
+                field_value = self._unserialize_type(field_type, field.type_enum, field.type_list, field_data)
 
                 setattr(self, name, field_value)
                 pointer += field_size
@@ -105,20 +143,33 @@ class TLSStructure(metaclass = OrderedMeta):
 
     # Encodes the current TLS Structure into raw bytes
     def encode(self):
-        pass
+        result = b""
 
+        for name in self.static_attributes:
+            field = getattr(type(self), name)
+
+            # Skips field which aren't TLSField
+            if type(field) is TLSField:
+                field_size = field.size.value(self)
+                field_type = field.type.value(self)
+                field_value = getattr(self, name)
+
+                # Type references are made to implement the switch cases
+                # of the TLS specification. The type reference is an enum
+                # class that tells which identifier maps to which structure.
+                if field.type_ref:
+                    field_type = field.type_ref(field_type).name
+
+                result += self._serialize_type(field_type, field.type_enum, field.type_list, field_size, field_value)
+
+        return result
 
     # Produces a string representation of the TLSStructure element.
-    # This is meant to be used for debug purposes.
+    # This is meant to inspect value of the structures.
     def __str__(self):
         result = type(self).__name__ + " {\n"
-        attributes = self._orderedKeys
 
-        for name in attributes:
-            # Skip internal attributes which all have the pattern __.*__
-            if name[:2] == "__":
-                continue
-
+        for name in self.static_attributes:
             field_value = getattr(self, name)
             field_value_str = str(field_value)
 
