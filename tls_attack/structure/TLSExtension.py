@@ -1,4 +1,4 @@
 from tls_attack.structure.TLSStructure import *
 
-class TLSCipherSuiteList(TLSStructure):
+class TLSExtension(TLSStructure):
 	pass

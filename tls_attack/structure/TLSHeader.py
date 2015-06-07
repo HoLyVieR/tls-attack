@@ -4,10 +4,10 @@ from tls_attack.structure.TLSStructure import *
 
 class TLSContentType(Enum):
 	TLSChangeCipherSpec = 20
-	TLSAlert = 21
-	TLSHandshake = 22
-	TLSApplicationData = 23
-	TLSHeartbeat = 24
+	TLSAlert            = 21
+	TLSHandshake        = 22
+	TLSApplicationData  = 23
+	TLSHeartbeat        = 24
 
 class TLSHeader(TLSStructure):
 	content_type = TLSField(size = 1, type = "int")

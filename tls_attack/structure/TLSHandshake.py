@@ -22,4 +22,4 @@ class TLSHandshake(TLSStructure):
 							type = TLSFieldRef(name = "handshake_type"),
 							type_ref = TLSHandshakeType
 						)
-	
+			

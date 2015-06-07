@@ -1,4 +1,4 @@
 from tls_attack.structure.TLSStructure import *
 
-class TLSCompressionList(TLSStructure):
+class TLSCompression(TLSStructure):
 	pass
