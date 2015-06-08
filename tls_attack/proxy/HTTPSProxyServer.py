@@ -2,6 +2,7 @@ import socketserver
 import socket
 import uuid
 import pprint
+import logging
 
 from tls_attack.structure.TLSHeader import *
 
@@ -68,7 +69,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         
 
     def _get_response_header(self):
-        response = b""
+        response  = b""
         response += b"HTTP/1.0 200 Connection established\r\n"
         response += b"Proxy-agent: Evil_Proxy_9000\r\n"
         response += b"\r\n"
@@ -84,6 +85,8 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
             buf += in_socket.recv(4096)
             
             while True:
+                logging.info("[%s] %s."% (connection_id, repr(buf)))
+
                 structure = TLSHeader()
                 length = structure.decode(buf)
 
@@ -91,7 +94,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
                 if length == 0:
                     break
 
-                print(structure)
+                logging.info("[%s] %s."% (connection_id, structure))
 
                 raw_segment = buf[:length]
                 response = structure
@@ -112,10 +115,10 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         return False, buf
 
     def handle(self):
-        print("Received connection ...")
+        logging.info("Received connection ...")
 
         headers = self._read_header()
-        print("Received headers ...", headers)
+        logging.info("Received headers ...", headers)
 
         if not headers["Method"] == b"CONNECT":
             self.close()
@@ -126,6 +129,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
 
         server = self._get_server_connection(headers)
         self.request.sendall(self._get_response_header())
+        logging.info("[%s] Connection established." % connection_id)
 
         server.setblocking(0)
         self.request.setblocking(0)
@@ -140,6 +144,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
             if not is_finished:
                 is_finished, buffer_request = self._handle_traffic(self.request, server, buffer_request, connection_id)
 
+        logging.info("[%s] Connection terminated." % connection_id)
         server.close()
         self.request.close()
         del connection_pool[connection_id]

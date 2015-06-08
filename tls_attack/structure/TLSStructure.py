@@ -1,5 +1,6 @@
 import struct
 import collections
+import logging
 
 import tls_attack.structure
 
@@ -65,6 +66,14 @@ class TLSStructure(metaclass = OrderedMeta):
             else:
                 result = obj.encode()
 
+        # Safety check to make sure we are properly encoding the value.
+        # For the remaining size (undecoded value) we ignore this.
+        if len(result) != type_size and type_size != TLSField.REMAINING_SIZE:
+            logging.warning( \
+                "Output length doesn't match the requested length. Expected : %d Given : %d " + \
+                "Object : %s", type_size, len(result), str(obj) \
+            )
+
         return result
 
 
@@ -99,7 +108,7 @@ class TLSStructure(metaclass = OrderedMeta):
 
                     if length == 0:
                         break
-
+                    
                     pointer += length
                     result.append(item)
 
@@ -120,6 +129,10 @@ class TLSStructure(metaclass = OrderedMeta):
             if type(field) is TLSField:
                 field_size = field.size.value(self)
                 field_type = field.type.value(self)
+
+                # If the field size is set to the remaining size
+                if field_size == TLSField.REMAINING_SIZE:
+                    field_size = len(raw) - pointer
 
                 # Check if we have enough data, otherwise we just have the partial data
                 # and we can't parse the whole structure. For this cases, we just assume
@@ -203,6 +216,10 @@ class TLSStructure(metaclass = OrderedMeta):
         return result
 
 class TLSField:
+
+    # Constant for undecoded value that will return the remaining data
+    REMAINING_SIZE = -1
+
     def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None):
         self.size = TLSFieldValue(size) if not callable(getattr(size, "value", None)) else size
         self.type = TLSFieldValue(type) if not callable(getattr(type, "value", None)) else type
