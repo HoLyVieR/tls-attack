@@ -5,6 +5,7 @@ import pprint
 import logging
 
 from tls_attack.structure.TLSHeader import *
+from tls_attack.structure.TLSState import *
 
 connection_pool = {}
 connection_handler = []
@@ -14,7 +15,7 @@ class HTTPSProxyServer:
     def __init__(self, port = 8443, host = "0.0.0.0"):
         self.port = port
         self.host = host
-        self.server = socketserver.TCPServer((host, port), HTTPSProxyServerHandler)
+        self.server = ThreadedTCPServer((host, port), HTTPSProxyServerHandler)
         self.is_started = False
 
     def start(self):
@@ -39,6 +40,9 @@ class HTTPSProxyServer:
 
     def get_output_source(self):
         return self
+
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    pass
 
 class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
     def send_packet(self, data):
@@ -80,31 +84,39 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         s.connect((headers["Url"], headers["Port"]))
         return s
 
-    def _handle_traffic(self, in_socket, out_socket, buf, connection_id):
+    def _handle_traffic(self, in_socket, out_socket, buf, connection_id, state, source):
         try:
-            buf += in_socket.recv(4096)
-            
+            try:
+                buf += in_socket.recv(4096)
+            except:
+                pass
+
             while True:
+                # If nothing was received, we can exit right away
+                if len(buf) == 0:
+                    break
+
                 logging.info("[%s] %s."% (connection_id, repr(buf)))
 
                 structure = TLSHeader()
-                length = structure.decode(buf)
+                length = structure.decode(buf, state, source)
 
                 # When there is no more TLS Structure to decode we are done parsing the data
                 if length == 0:
                     break
 
                 logging.info("[%s] %s."% (connection_id, structure))
+                state.update(source, structure)
 
                 raw_segment = buf[:length]
                 response = structure
 
                 for handler in connection_handler:
-                    response = handler(connection_id, response)
+                    response = handler(connection_id, response, connection_id, state)
 
                 # If the response was altered we send the modified content
                 if not response	== None:
-                    raw_segment	= response.encode()
+                    raw_segment	= response.encode(state, source)
 
                 out_socket.sendall(raw_segment)
                 buf = buf[length:]
@@ -132,17 +144,22 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         logging.info("[%s] Connection established." % connection_id)
 
         server.setblocking(0)
+        server.settimeout(0.0)
         self.request.setblocking(0)
+        self.request.settimeout(0.0)
 
         buffer_reply = b""
         buffer_request = b""
         is_finished = False
 
+        # Initializating the state of the connection
+        self.state = TLSState()
+
         while not is_finished:
-            is_finished, buffer_reply = self._handle_traffic(server, self.request, buffer_reply, connection_id)
+            is_finished, buffer_reply = self._handle_traffic(server, self.request, buffer_reply, connection_id, self.state, TLSSource.SERVER)
 
             if not is_finished:
-                is_finished, buffer_request = self._handle_traffic(self.request, server, buffer_request, connection_id)
+                is_finished, buffer_request = self._handle_traffic(self.request, server, buffer_request, connection_id, self.state, TLSSource.CLIENT)
 
         logging.info("[%s] Connection terminated." % connection_id)
         server.close()

@@ -6,6 +6,7 @@ class TLSHandshakeType(Enum):
     TLSHelloRequest       = 0
     TLSClientHello        = 1
     TLSServerHello        = 2
+    TLSNewSessionTicket   = 4
     TLSCertificateStruct  = 11
     TLSServerKeyExchange  = 12
     TLSCertificateRequest = 13

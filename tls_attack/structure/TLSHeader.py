@@ -13,9 +13,10 @@ class TLSHeader(TLSStructure):
     content_type = TLSField(size = 1, type = "int")
     version      = TLSField(size = 2, type = "int")
     length       = TLSField(size = 2, type = "int")
-    tls_object   = TLSField(
+    body         = TLSField(
                         size = TLSFieldRef(name = "length"), 
                         type = TLSFieldRef(name = "content_type"),
-                        type_ref = TLSContentType
+                        type_ref = TLSContentType,
+                        encryptable = True
                     )
 

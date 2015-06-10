@@ -38,7 +38,7 @@ class TLSStructure(metaclass = OrderedMeta):
         return getattr(getattr(tls_attack.structure, type), type)
 
     # Serializes an object to raw bytes.
-    def _serialize_type(self, type, type_enum, type_list, type_size, obj):
+    def _serialize_type(self, type, type_enum, type_list, type_size, state, source, obj):
         result = b""
 
         if type == "int":
@@ -61,10 +61,10 @@ class TLSStructure(metaclass = OrderedMeta):
                 result = b""
 
                 for item in obj:
-                    result += item.encode()
+                    result += item.encode(state, source)
 
             else:
-                result = obj.encode()
+                result = obj.encode(state, source)
 
         # Safety check to make sure we are properly encoding the value.
         # For the remaining size (undecoded value) we ignore this.
@@ -78,7 +78,7 @@ class TLSStructure(metaclass = OrderedMeta):
 
 
     # Unserializes the raw bytes into the type specified.
-    def _unserialize_type(self, type, type_enum, type_list, data):
+    def _unserialize_type(self, type, type_enum, type_list, state, source, data):
         result = None
         
         if type == "int":
@@ -104,7 +104,7 @@ class TLSStructure(metaclass = OrderedMeta):
 
                 while pointer < len(data):
                     item = type()
-                    length = item.decode(data[pointer:])
+                    length = item.decode(data[pointer:], state, source)
 
                     if length == 0:
                         break
@@ -114,12 +114,12 @@ class TLSStructure(metaclass = OrderedMeta):
 
             else:
                 result = type()
-                result.decode(data)
+                result.decode(data, state, source)
 
         return result
 
     # Decodes the raw bytes provided into the current TLSStructure.
-    def decode(self, raw):
+    def decode(self, raw, state, source):
         pointer = 0
 
         for name in self.static_attributes:
@@ -127,8 +127,15 @@ class TLSStructure(metaclass = OrderedMeta):
 
             # Skips field which aren't TLSField
             if type(field) is TLSField:
-                field_size = field.size.value(self)
-                field_type = field.type.value(self)
+                field_size     = field.size.value(self)
+                field_type     = field.type.value(self)
+                field_type_ref = field.type_ref
+
+                # When the state of the connection is encrypted, the encryptable field
+                # should all be considered as encrypted data.
+                if field.encryptable and state.encrypted[source]:
+                    field_type = "TLSEncryptedData"
+                    field_type_ref = None
 
                 # If the field size is set to the remaining size
                 if field_size == TLSField.REMAINING_SIZE:
@@ -143,11 +150,11 @@ class TLSStructure(metaclass = OrderedMeta):
                 # Type references are made to implement the switch cases
                 # of the TLS specification. The type reference is an enum
                 # class that tells which identifier maps to which structure.
-                if field.type_ref:
-                    field_type = field.type_ref(field_type).name
+                if field_type_ref:
+                    field_type = field_type_ref(field_type).name
 
                 field_data = raw[pointer : pointer + field_size]
-                field_value = self._unserialize_type(field_type, field.type_enum, field.type_list, field_data)
+                field_value = self._unserialize_type(field_type, field.type_enum, field.type_list, state, source, field_data)
 
                 setattr(self, name, field_value)
                 pointer += field_size
@@ -155,7 +162,7 @@ class TLSStructure(metaclass = OrderedMeta):
         return pointer
 
     # Encodes the current TLS Structure into raw bytes
-    def encode(self):
+    def encode(self, state, source):
         result = b""
 
         for name in self.static_attributes:
@@ -163,17 +170,24 @@ class TLSStructure(metaclass = OrderedMeta):
 
             # Skips field which aren't TLSField
             if type(field) is TLSField:
-                field_size = field.size.value(self)
-                field_type = field.type.value(self)
-                field_value = getattr(self, name)
+                field_size     = field.size.value(self)
+                field_type     = field.type.value(self)
+                field_value    = getattr(self, name)
+                field_type_ref = field.type_ref
+
+                # When the state of the connection is encrypted, the encryptable field
+                # should all be considered as encrypted data.
+                if field.encryptable and state.encrypted[source]:
+                    field_type = "TLSEncryptedData"
+                    field_type_ref  = None
 
                 # Type references are made to implement the switch cases
                 # of the TLS specification. The type reference is an enum
                 # class that tells which identifier maps to which structure.
-                if field.type_ref:
-                    field_type = field.type_ref(field_type).name
+                if field_type_ref:
+                    field_type = field_type_ref(field_type).name
 
-                result += self._serialize_type(field_type, field.type_enum, field.type_list, field_size, field_value)
+                result += self._serialize_type(field_type, field.type_enum, field.type_list, field_size, state, source, field_value)
 
         return result
 
@@ -220,13 +234,14 @@ class TLSField:
     # Constant for undecoded value that will return the remaining data
     REMAINING_SIZE = -1
 
-    def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None):
+    def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None, encryptable = False):
         self.size = TLSFieldValue(size) if not callable(getattr(size, "value", None)) else size
         self.type = TLSFieldValue(type) if not callable(getattr(type, "value", None)) else type
         self.type_ref = type_ref
         self.type_list = type_list
         self.type_enum = type_enum
         self.value = None
+        self.encryptable = encryptable
 
 class TLSFieldValue:
     def __init__(self, value):
