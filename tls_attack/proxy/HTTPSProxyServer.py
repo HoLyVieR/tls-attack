@@ -112,7 +112,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
                 response = structure
 
                 for handler in connection_handler:
-                    response = handler(connection_id, response, connection_id, state)
+                    response = handler(connection_id, response, state, source)
 
                 # If the response was altered we send the modified content
                 if not response	== None:
