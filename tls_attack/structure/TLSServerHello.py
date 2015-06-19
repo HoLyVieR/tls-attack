@@ -3,7 +3,7 @@ from enum import *
 from tls_attack.structure.TLSStructure import *
 
 class TLSServerHello(TLSStructure):
-    server_version     = TLSField(size = 2,  type = "int")
+    version            = TLSField(size = 2,  type = "int")
     gmt_unix_timestamp = TLSField(size = 4,  type = "int")
     random_bytes       = TLSField(size = 28, type = "bytes")
     session_id_length  = TLSField(size = 1,  type = "int")
@@ -15,9 +15,10 @@ class TLSServerHello(TLSStructure):
     cipher_suite        = TLSField(size = 2, type = "TLSCipherSuiteStruct")
     compression_methods = TLSField(size = 1, type = "TLSCompressionStruct")
 
-    extensions_length = TLSField(size = 2,  type = "int")
+    extensions_length = TLSField(size = 2,  type = "int", tls_version = 0x0301)
     extensions        = TLSField(
                                 size = TLSFieldRef(name = "extensions_length"),
                                 type = "TLSExtension",
-                                type_list = True
+                                type_list = True,
+                                tls_version = 0x0301
                             )

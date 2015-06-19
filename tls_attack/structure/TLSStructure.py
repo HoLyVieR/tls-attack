@@ -175,6 +175,9 @@ class TLSStructure(metaclass = OrderedMeta):
                 field_value    = getattr(self, name)
                 field_type_ref = field.type_ref
 
+                if type(field_value) is TLSField:
+                    logging.error("Field value '%s' is of type 'TLSField'. This means no value was assigned to it !" % name) 
+
                 # When the state of the connection is encrypted, the encryptable field
                 # should all be considered as encrypted data.
                 if field.encryptable and state.encrypted[source]:
@@ -234,7 +237,7 @@ class TLSField:
     # Constant for undecoded value that will return the remaining data
     REMAINING_SIZE = -1
 
-    def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None, encryptable = False):
+    def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None, encryptable = False, tls_version = None):
         self.size = TLSFieldValue(size) if not callable(getattr(size, "value", None)) else size
         self.type = TLSFieldValue(type) if not callable(getattr(type, "value", None)) else type
         self.type_ref = type_ref
@@ -242,6 +245,20 @@ class TLSField:
         self.type_enum = type_enum
         self.value = None
         self.encryptable = encryptable
+
+        if not tls_version is None:
+            self.size = TLSFieldVersionDependant(self.size, tls_version)
+
+class TLSFieldVersionDependant:
+    def __init__(self, value, tls_version):
+        self._value = value
+        self._tls_version = tls_version
+
+    def value(self, obj):
+        if obj.version < self._tls_version:
+            return 0
+
+        return self._value.value(obj)
 
 class TLSFieldValue:
     def __init__(self, value):

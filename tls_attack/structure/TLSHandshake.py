@@ -14,6 +14,8 @@ class TLSHandshakeType(Enum):
     TLSCertificateVerify  = 15
     TLSClientKeyExchange  = 16
     TLSFinished           = 20
+    TLSCertificateUrl     = 21
+    TLSCertificateStatus  = 22
 
 class TLSHandshake(TLSStructure):
     handshake_type = TLSField(size = 1, type = "int")

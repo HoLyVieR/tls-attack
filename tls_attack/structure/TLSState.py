@@ -1,3 +1,5 @@
+import logging
+
 from tls_attack.structure.TLSCipherSuiteStruct import *
 from tls_attack.structure.TLSCompressionStruct import *
 from tls_attack.structure.TLSHeader import *
@@ -23,12 +25,12 @@ class TLSState:
             self._handle_handshake(source, tls_object.body)
 
     def _handle_change_cipher_spec(self, source, change_cipher_spec):
-        print("Change Cipher Spec received. " + str(source)  + " is now encrypted.")
+        logging.info("Change Cipher Spec received. " + str(source)  + " is now encrypted.")
         self.encrypted[source] = True
 
     def _handle_handshake(self, source, handshake):
         if type(handshake.body) is TLSServerHello:
-            print("Server Hello received.")
+            logging.info("Server Hello received.")
             server_hello      = handshake.body
             self.cipher_suite = server_hello.cipher_suite
             self.compression  = server_hello.compression_methods

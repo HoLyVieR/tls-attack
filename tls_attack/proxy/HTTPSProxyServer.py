@@ -3,6 +3,8 @@ import socket
 import uuid
 import pprint
 import logging
+import traceback
+import threading
 
 from tls_attack.structure.TLSHeader import *
 from tls_attack.structure.TLSState import *
@@ -19,21 +21,28 @@ class HTTPSProxyServer:
         self.is_started = False
 
     def start(self):
-        if not self.is_started:
+        def server_thread():
             self.server.serve_forever()
+
+        if not self.is_started:
             self.is_started = True
+            
+            t = threading.Thread(target=server_thread)
+            t.start()
+            
+            logging.info("HTTPS Server started.")
 
     def on_packet_received(self, callback):
         connection_handler.append(callback)
 
-    def send_packet(self, connection, destination, data):
+    def send_packet(self, connection_id, destination, data):
         if not self.is_started:
-            return Exception("Proxy not started !")
+            raise Exception("Proxy not started !")
 
-        if not connection.id in connection_pool:
-            return Exception("Invalid connection ID. The connection was probably closed.")
+        if not connection_id in connection_pool:
+            raise Exception("Invalid connection ID. The connection was probably closed.")
 
-        return connection_pool[connection.id].send_packet(destination, data)
+        return connection_pool[connection_id].send_packet(destination, data)
 
     def get_input_source(self):
         return self
@@ -45,9 +54,13 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
 
 class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
-    def send_packet(self, data):
-        print("2 !")
-        pass
+    def send_packet(self, destination, data):
+        print("Sending %s to %s" % (repr(data), str(destination)))
+
+        if destination == TLSSource.CLIENT:
+            self.request.sendall(data)
+        else:
+            self.server.sendall(data)
 
     def _read_header(self):
         data = b""
@@ -112,7 +125,21 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
                 response = structure
 
                 for handler in connection_handler:
-                    response = handler(connection_id, response, state, source)
+                    handler_response = None
+
+                    try:
+                        handler_response = handler(connection_id, response, state, source)
+                    except Exception as e:
+                        logging.error(traceback.format_exc())
+
+                    # If nothing is returned or the handler failed, we don't change the structure.
+                    if not handler_response is None:
+                        
+                        # Sanity check to make sure we are still handling TLStructure.
+                        if issubclass(type(handler_response), TLSStructure):
+                            response = handler_response
+                        else:
+                            logging.error("[%s] Value returned from handler must be either None or a TLSStructure. Received '%s' of type '%s'." % (connection_id, handler_response, str(type(handler_response))))
 
                 # If the response was altered we send the modified content
                 if not response	== None:
@@ -139,12 +166,12 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         connection_id = str(uuid.uuid4())
         connection_pool[connection_id] = self
 
-        server = self._get_server_connection(headers)
+        self.server = self._get_server_connection(headers)
         self.request.sendall(self._get_response_header())
         logging.info("[%s] Connection established." % connection_id)
 
-        server.setblocking(0)
-        server.settimeout(0.0)
+        self.server.setblocking(0)
+        self.server.settimeout(0.0)
         self.request.setblocking(0)
         self.request.settimeout(0.0)
 
@@ -156,13 +183,13 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         self.state = TLSState()
 
         while not is_finished:
-            is_finished, buffer_reply = self._handle_traffic(server, self.request, buffer_reply, connection_id, self.state, TLSSource.SERVER)
+            is_finished, buffer_reply = self._handle_traffic(self.server, self.request, buffer_reply, connection_id, self.state, TLSSource.SERVER)
 
             if not is_finished:
-                is_finished, buffer_request = self._handle_traffic(self.request, server, buffer_request, connection_id, self.state, TLSSource.CLIENT)
+                is_finished, buffer_request = self._handle_traffic(self.request, self.server, buffer_request, connection_id, self.state, TLSSource.CLIENT)
 
         logging.info("[%s] Connection terminated." % connection_id)
-        server.close()
+        self.server.close()
         self.request.close()
         del connection_pool[connection_id]
 
