@@ -46,11 +46,26 @@ class HTTPRequest:
         self.body = body
 
 class HTTPResponse:
-    def __init__(self, response_code, headers, body, raw):
+    def __init__(self, response_code, response_name, headers, body, raw):
         self.raw = raw
         self.headers = headers
         self.response_code = response_code
+        self.response_name = response_name
         self.body = body
+
+    def append_body(self, content):
+        return replace_body(self.body + content)
+
+    def replace_body(self, content):
+        new_body = content
+        new_headers = dict(self.headers)
+        new_headers[b"Content-Length"] = str(len(new_body))
+        new_raw = \
+                b"HTTP/1.1 " + self.response_code + b" " + self.response_name + b"\r\n" + \
+                b"\r\n".join(new_headers) + \
+                b"\r\n"*2 + new_body
+
+        return HTTPResponse(self.response_code, self.response_name, new_headers, new_body, new_raw)
 
 class HTTPProxyServerHandler(socketserver.BaseRequestHandler):
     def _read(self, buffer, handler, is_request):
@@ -104,7 +119,7 @@ class HTTPProxyServerHandler(socketserver.BaseRequestHandler):
         if is_request:
             return b"", HTTPRequest(host, url, headers_map, body, content)
         else:
-            return b"", HTTPResponse(response_code, headers_map, body, content)
+            return b"", HTTPResponse(response_code, response_name, headers_map, body, content)
 
     def _process_request(self, request):
         logging.info("Received request for the host '%s' with the url '%s'." % (request.host, request.url))

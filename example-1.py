@@ -11,9 +11,21 @@ def packet_received(connection_id, tls_object, state, source):
     print(tls_object)
     time.sleep(0.5)
 
+def url_response(request, response):
+    response_body = response.body
+
+    print("Received body !")
+    print(response_body)
+
+    if len(response_body) > 0:
+        response_body = response_body.replace(b"It works!", b"It doesn't works!")
+        return response.replace_body(response_body)
+
+
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-server = HTTPProxyServer(port = 8081)
+server = HTTPProxyServer(port = 8080)
+server.on_url_response(url_response)
 server.start()
 
 #server = HTTPSProxyServer(port = 8443)
