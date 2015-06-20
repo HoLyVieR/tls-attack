@@ -44,12 +44,6 @@ class HTTPSProxyServer:
 
         return connection_pool[connection_id].send_packet(destination, data)
 
-    def get_input_source(self):
-        return self
-
-    def get_output_source(self):
-        return self
-
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
 
