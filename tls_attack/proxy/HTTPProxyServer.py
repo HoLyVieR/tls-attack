@@ -72,7 +72,6 @@ class HTTPResponse:
 
     @staticmethod
     def _flatten_headers(headers):
-        print(headers)
         return b"\r\n".join(map(lambda b: b + b": " + headers[b], headers))
 
     def append_body(self, content):

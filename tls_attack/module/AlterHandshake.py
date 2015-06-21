@@ -10,6 +10,7 @@ from tls_attack.structure.TLSEmpty import *
 from tls_attack.structure.TLSHeader import *
 from tls_attack.structure.TLSSource import *
 
+# TODO : Remove this
 class AlterHandshake:
     def __init__(self, proxy):
         self.proxy = proxy

@@ -27,6 +27,7 @@ server = HTTPProxyServer(port = 8081)
 
 attack = ForceRequest(server)
 attack.force_request("192.168.56.102", "http://perdu.com")
+attack.force_request("127.0.0.1", "http://perdu.com")
 attack.start()
 
 server.start()
