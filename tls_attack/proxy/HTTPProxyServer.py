@@ -5,6 +5,8 @@ import urllib
 import logging
 import threading
 
+from tls_attack.proxy.Connection import *
+
 url_request_handler = []
 url_response_handler = []
 
@@ -53,19 +55,43 @@ class HTTPResponse:
         self.response_name = response_name
         self.body = body
 
+    @staticmethod
+    def create_response_from_content(content, content_type):
+        headers = {
+            b"Content-Type" : content_type,
+            b"Content-Length" : bytes(str(len(content)), "ascii"),
+            b"Server" : b"Evil_Proxy_9000",
+            b"Connection" : b"close"
+        }
+        raw = \
+            b"HTTP/1.1 200 OK\r\n" + \
+            HTTPResponse._flatten_headers(headers) + \
+            b"\r\n"*2 + content
+
+        return HTTPResponse(200, "OK", headers, content, raw)
+
+    @staticmethod
+    def _flatten_headers(headers):
+        print(headers)
+        return b"\r\n".join(map(lambda b: b + b": " + headers[b], headers))
+
     def append_body(self, content):
-        return replace_body(self.body + content)
+        return self.replace_body(self.body + content)
 
     def replace_body(self, content):
         new_body = content
         new_headers = dict(self.headers)
-        new_headers[b"Content-Length"] = str(len(new_body))
+        new_headers[b"Content-Length"] = bytes(str(len(new_body)), "ascii")
         new_raw = \
                 b"HTTP/1.1 " + self.response_code + b" " + self.response_name + b"\r\n" + \
-                b"\r\n".join(new_headers) + \
+                HTTPResponse._flatten_headers(new_headers) + \
                 b"\r\n"*2 + new_body
 
         return HTTPResponse(self.response_code, self.response_name, new_headers, new_body, new_raw)
+
+
+class HTTPConnection(Connection):
+    pass
 
 class HTTPProxyServerHandler(socketserver.BaseRequestHandler):
     def _read(self, buffer, handler, is_request):
@@ -121,13 +147,13 @@ class HTTPProxyServerHandler(socketserver.BaseRequestHandler):
         else:
             return b"", HTTPResponse(response_code, response_name, headers_map, body, content)
 
-    def _process_request(self, request):
+    def _process_request(self, request, connection):
         logging.info("Received request for the host '%s' with the url '%s'." % (request.host, request.url))
 
         # URL request handler are triggered before the request, since
         # they can return a custom response to the request
         for callback in url_request_handler:
-            result = callback(request)
+            result = callback(connection, request)
 
             if result is None:
                 continue
@@ -158,7 +184,7 @@ class HTTPProxyServerHandler(socketserver.BaseRequestHandler):
 
         # Triggering the url response event
         for callback in url_response_handler:
-            result = callback(request, response)
+            result = callback(connection, request, response)
 
             if result is None:
                 continue
@@ -174,13 +200,20 @@ class HTTPProxyServerHandler(socketserver.BaseRequestHandler):
     def handle(self):
         logging.info("Received connection.")
 
+        peer_info = self.request.getpeername()
+        connection = HTTPConnection(source_ip = peer_info[0], source_port = peer_info[1])
         buffer_client = b""
 
         while True:
             buffer_client, request = self._read(buffer_client, self.request, True)
 
             if not request is None:
-                self._process_request(request)
+                # Updating the connection with the destination information
+                host, port = request.host.split(b":")
+                connection.destination_ip   = socket.gethostbyname(host)
+                connection.destination_port = int(port)
+
+                self._process_request(request, connection)
                 break
 
         logging.info("Request completed.")

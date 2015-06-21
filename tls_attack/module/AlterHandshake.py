@@ -35,7 +35,7 @@ class AlterHandshake:
     def replace_certificate(self, certificate):
         pass
 
-    def _handle(self, connection_id, tls_object, state, source):
+    def _handle(self, connection, tls_object, state, source):
         # TLS version downgrade attack
         if not self.tls_version is None:
             if type(tls_object.body) is TLSHandshake:
@@ -53,10 +53,10 @@ class AlterHandshake:
                         alert_message.body.description = TLSAlertDescription.PROTOCOL_VERSION
                         alert_message.length = len(alert_message.body.encode(state, source))
 
-                        logging.warning("[%s] Sending TLS Fatal. %s" % (connection_id, str(alert_message.encode(state, source))))
-                        self.proxy.send_packet(connection_id, source, alert_message.encode(state, source))
+                        logging.warning("[%s] Sending TLS Fatal. %s" % (connection.id, str(alert_message.encode(state, source))))
+                        self.proxy.send_packet(connection.id, source, alert_message.encode(state, source))
 
-                        logging.warning("[%s] Dropping TLS Handshake of version '%s'." % (connection_id, hex(hello.version)))
+                        logging.warning("[%s] Dropping TLS Handshake of version '%s'." % (connection.id, hex(hello.version)))
                         return TLSEmpty()
 
         # Cipher suite downgrade logic
@@ -77,7 +77,7 @@ class AlterHandshake:
                                 break
 
                     if replace:
-                        logging.warning("[%s] Changing available cipher suite to '%s'." % (connection_id, str(self.cipher)))
+                        logging.warning("[%s] Changing available cipher suite to '%s'." % (connection.id, str(self.cipher)))
 
                         cipher_suite_struct = TLSCipherSuiteStruct()
                         cipher_suite_struct.cipher_suite = self.cipher

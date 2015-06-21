@@ -8,6 +8,7 @@ import threading
 
 from tls_attack.structure.TLSHeader import *
 from tls_attack.structure.TLSState import *
+from tls_attack.proxy.Connection import *
 
 connection_pool = {}
 connection_handler = []
@@ -45,6 +46,9 @@ class HTTPSProxyServer:
         return connection_pool[connection_id].send_packet(destination, data)
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    pass
+
+class HTTPSConnection(Connection):
     pass
 
 class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
@@ -91,7 +95,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         s.connect((headers["Url"], headers["Port"]))
         return s
 
-    def _handle_traffic(self, in_socket, out_socket, buf, connection_id, state, source):
+    def _handle_traffic(self, in_socket, out_socket, buf, connection, state, source):
         try:
             try:
                 buf += in_socket.recv(4096)
@@ -103,7 +107,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
                 if len(buf) == 0:
                     break
 
-                logging.info("[%s] %s."% (connection_id, repr(buf)))
+                logging.info("[%s] %s."% (connection.id, repr(buf)))
 
                 structure = TLSHeader()
                 length = structure.decode(buf, state, source)
@@ -112,7 +116,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
                 if length == 0:
                     break
 
-                logging.info("[%s] %s."% (connection_id, structure))
+                logging.info("[%s] %s."% (connection.id, structure))
                 state.update(source, structure)
 
                 raw_segment = buf[:length]
@@ -122,7 +126,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
                     handler_response = None
 
                     try:
-                        handler_response = handler(connection_id, response, state, source)
+                        handler_response = handler(connection, response, state, source)
                     except Exception as e:
                         logging.error(traceback.format_exc())
 
@@ -157,12 +161,19 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
             self.close()
             return
 
-        connection_id = str(uuid.uuid4())
-        connection_pool[connection_id] = self
+        peer_info = self.request.getpeername()
+        
+        connection = HTTPSConnection()
+        connection.source_ip = peer_info[0]
+        connection.source_port = peer_info[1]
+        connection.destination_ip = headers["Url"]
+        connection.destination_port = headers["Port"]
+
+        connection_pool[connection.id] = self
 
         self.server = self._get_server_connection(headers)
         self.request.sendall(self._get_response_header())
-        logging.info("[%s] Connection established." % connection_id)
+        logging.info("[%s] Connection established." % connection.id)
 
         self.server.setblocking(0)
         self.server.settimeout(0.0)
@@ -177,13 +188,13 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         self.state = TLSState()
 
         while not is_finished:
-            is_finished, buffer_reply = self._handle_traffic(self.server, self.request, buffer_reply, connection_id, self.state, TLSSource.SERVER)
+            is_finished, buffer_reply = self._handle_traffic(self.server, self.request, buffer_reply, connection, self.state, TLSSource.SERVER)
 
             if not is_finished:
-                is_finished, buffer_request = self._handle_traffic(self.request, self.server, buffer_request, connection_id, self.state, TLSSource.CLIENT)
+                is_finished, buffer_request = self._handle_traffic(self.request, self.server, buffer_request, connection, self.state, TLSSource.CLIENT)
 
-        logging.info("[%s] Connection terminated." % connection_id)
+        logging.info("[%s] Connection terminated." % connection.id)
         self.server.close()
         self.request.close()
-        del connection_pool[connection_id]
+        del connection_pool[connection.id]
 
