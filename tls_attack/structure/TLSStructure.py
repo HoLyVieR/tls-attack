@@ -141,6 +141,11 @@ class TLSStructure(metaclass = OrderedMeta):
                 if field_size == TLSField.REMAINING_SIZE:
                     field_size = len(raw) - pointer
 
+                # For optional field, we check if there's still value to be decoded.
+                # If there's nothing left to be decoded, it means it wasn't any value.
+                if field.optional and len(raw) == pointer:
+                    field_size = 0
+
                 # Check if we have enough data, otherwise we just have the partial data
                 # and we can't parse the whole structure. For this cases, we just assume
                 # nothing could be decoded.
@@ -153,8 +158,11 @@ class TLSStructure(metaclass = OrderedMeta):
                 if field_type_ref:
                     field_type = field_type_ref(field_type).name
 
-                field_data = raw[pointer : pointer + field_size]
-                field_value = self._unserialize_type(field_type, field.type_enum, field.type_list, state, source, field_data)
+                if field_size > 0:
+                    field_data = raw[pointer : pointer + field_size]
+                    field_value = self._unserialize_type(field_type, field.type_enum, field.type_list, state, source, field_data)
+                else:
+                    field_value = None
 
                 setattr(self, name, field_value)
                 pointer += field_size
@@ -184,13 +192,19 @@ class TLSStructure(metaclass = OrderedMeta):
                     field_type = "TLSEncryptedData"
                     field_type_ref  = None
 
+                # For optional field, we check if there's still value to be decoded.
+                # If there's nothing left to be decoded, it means it wasn't any value.
+                if field.optional and field_value is None:
+                    field_size = TLSField.NONE
+
                 # Type references are made to implement the switch cases
                 # of the TLS specification. The type reference is an enum
                 # class that tells which identifier maps to which structure.
                 if field_type_ref:
                     field_type = field_type_ref(field_type).name
 
-                result += self._serialize_type(field_type, field.type_enum, field.type_list, field_size, state, source, field_value)
+                if not field_size == TLSField.NONE:
+                    result += self._serialize_type(field_type, field.type_enum, field.type_list, field_size, state, source, field_value)
 
         return result
 
@@ -236,8 +250,9 @@ class TLSField:
 
     # Constant for undecoded value that will return the remaining data
     REMAINING_SIZE = -1
+    NONE = 0
 
-    def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None, encryptable = False, tls_version = None):
+    def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None, encryptable = False, optional = False):
         self.size = TLSFieldValue(size) if not callable(getattr(size, "value", None)) else size
         self.type = TLSFieldValue(type) if not callable(getattr(type, "value", None)) else type
         self.type_ref = type_ref
@@ -245,20 +260,7 @@ class TLSField:
         self.type_enum = type_enum
         self.value = None
         self.encryptable = encryptable
-
-        if not tls_version is None:
-            self.size = TLSFieldVersionDependant(self.size, tls_version)
-
-class TLSFieldVersionDependant:
-    def __init__(self, value, tls_version):
-        self._value = value
-        self._tls_version = tls_version
-
-    def value(self, obj):
-        if obj.version < self._tls_version:
-            return 0
-
-        return self._value.value(obj)
+        self.optional = optional
 
 class TLSFieldValue:
     def __init__(self, value):

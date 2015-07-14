@@ -26,10 +26,10 @@ class TLSClientHello(TLSStructure):
                                         type_list = True
                                     )
 
-    extensions_length = TLSField(size = 2,  type = "int", tls_version = 0x0301)
+    extensions_length = TLSField(size = 2,  type = "int", optional = True)
     extensions        = TLSField(
                                 size = TLSFieldRef(name = "extensions_length"),
                                 type = "TLSExtension",
                                 type_list = True,
-                                tls_version = 0x0301
+                                optional = True
                             )

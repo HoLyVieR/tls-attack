@@ -2,6 +2,32 @@
 	var id = "%s";
 
 	function execute_task(task) {
+		var finished = false;
+
+		// Report back the request to the server.
+		// This is called once the iframe onload or error event triggered.
+		// Or when at least 5 seconds elapsed.
+		function task_completed () {
+			// We report the task completed only once
+			if (finished) {
+				return
+			}
+
+			var xhr = new XMLHttpRequest();
+			xhr.open("GET", "/" + id + "/task_done/" + task.id, true);
+			xhr.send(null);
+
+			// Cleanup the element to make sure it doesn't clog the page
+			frm = document.getElementById(formId);
+			frm.parentNode.removeChild(frm);
+
+			setTimeout(function () {
+				iframe.parentNode.removeChild(iframe);
+			}, 2000);
+
+			finished = true;
+		}
+
 		// Creates a target iframe in which the request will be posted.
 		// This allows post request without changing page
 		var iframeId = Math.random().toString(16).substr(2) + Math.random().toString(16).substr(2);
@@ -11,16 +37,20 @@
 		iframe.style.height = "0px";
 		iframe.name = iframeId;
 		iframe.id = iframeId;
+		iframe.onload = task_completed;
+		iframe.onerror = task_completed;
 		document.body.appendChild(iframe);
 
 		// Creates a form which will be posted in the iframe create before.
 		var formId = Math.random().toString(16).substr(2) + Math.random().toString(16).substr(2);
 		var form = "<form target='" + iframeId + "' id='" + formId + "' action='" + task.url + "' method='" + ((task.post_data) ? "POST" : "GET") + "'>";
 
-		var values = task.post_data.split("&");
-		for (var i=0; i<values.length; i++) {
-			var parts = values[i].split("=");
-			form += "<input type='hidden' name='" + unescape(parts[0]) + "' value='" + unescape(parts[1]) + "' />"
+		if (task.post_data) {
+			var values = task.post_data.split("&");
+			for (var i=0; i<values.length; i++) {
+				var parts = values[i].split("=");
+				form += "<input type='hidden' name='" + unescape(parts[0]) + "' value='" + unescape(parts[1]) + "' />"
+			}
 		}
 
 		form += "</form>"
@@ -34,20 +64,7 @@
 		// Go ! 
 		document.getElementById(formId).submit();
 
-		// Report back the request to the server.
-		setTimeout(function () {
-			var xhr = new XMLHttpRequest();
-			xhr.open("GET", "/" + id + "/task_done/" + task.id, true);
-			xhr.send(null);
-
-			// Cleanup the element to make sure it doesn't clog the page
-			frm = document.getElementById(formId);
-			frm.parentNode.removeChild(frm);
-
-			setTimeout(function () {
-				iframe.parentNode.removeChild(iframe);
-			}, 2000);
-		}, 0);
+		setTimeout(task_completed, 5000);
 	}
 
 	function get_next_task() {

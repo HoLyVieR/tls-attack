@@ -7,8 +7,8 @@ import traceback
 import threading
 
 from tls_attack.structure.TLSHeader import *
-from tls_attack.structure.TLSState import *
-from tls_attack.proxy.Connection import *
+from tls_attack.structure.TLSState  import *
+from tls_attack.proxy.Connection    import *
 
 connection_pool = {}
 connection_handler = []

@@ -200,7 +200,7 @@ class HTTPProxyServerHandler(socketserver.BaseRequestHandler):
         logging.info("Received connection.")
 
         peer_info = self.request.getpeername()
-        connection = HTTPConnection(source_ip = peer_info[0], source_port = peer_info[1])
+        connection = HTTPConnection(source_ip = bytes(peer_info[0], "ascii"), source_port = bytes(peer_info[1], "ascii"))
         buffer_client = b""
 
         while True:

