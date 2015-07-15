@@ -14,6 +14,9 @@ def packet_received(connection, tls_object, state, source):
     #time.sleep(0.5)
     pass
 
+def packet_intercept(connection, tls_object, state, source):
+    print(tls_object)
+
 logging.basicConfig(stream=sys.stdout, level=logging.WARN)
 
 http_server = HTTPProxyServer(port = 8080)
@@ -23,6 +26,7 @@ https_server = HTTPSProxyServer(port = 8443)
 https_server.on_packet_received(packet_received)
 
 oracle = ForceRequestOracle(force_request, https_server, b"192.168.56.101", b"192.168.56.102")
+oracle.force_request(b"/AAAAAA", b"", packet_intercept)
 oracle.start()
 
 #attack = PoodleAttack(force_request, https_server)

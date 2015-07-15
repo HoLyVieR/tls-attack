@@ -57,12 +57,12 @@ class ForceRequest:
         result = None
 
         if response.headers[b"Content-Type"] == b"text/html":
-            logging.warning("Injection loader script in HTML content.")
+            logging.warning("Injecting loader script in HTML content.")
             content = HTML_INJECTION_CONTENT.replace(b"%s", queue_id)
             result = response.append_body(content)
 
         if response.headers[b"Content-Type"] == b"text/javascript":
-            logging.warning("Injection loader script in JavaScript content.")
+            logging.warning("Injecting loader script in JavaScript content.")
             content = JAVASCRIPT_INJECTION_CONTENT.replace(b"%s", queue_id)
             result = response.append_body(content)
 
@@ -117,7 +117,9 @@ class ForceRequest:
                     return EMPTY_RESPONSE
 
                 queue["task"].pop(0)
-                task.callback(task)
+
+                if task.callback:
+                    task.callback(task)
             except Exception as e:
                 logging.error(traceback.format_exc())
 
