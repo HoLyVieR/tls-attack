@@ -4,11 +4,9 @@ import time
 
 from tls_attack.proxy.HTTPSProxyServer         import *
 from tls_attack.proxy.HTTPProxyServer          import *
-from tls_attack.module.AlterHandshake          import *
 from tls_attack.module.ForceRequest            import *
 from tls_attack.module.ForceRequestOracle      import *
 from tls_attack.module.PoodleAttack            import *
-from tls_attack.structure.TLSCipherSuiteStruct import *
 
 c_index = 0
 c_key = None

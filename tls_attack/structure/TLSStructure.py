@@ -145,7 +145,7 @@ class TLSStructure(metaclass = OrderedMeta):
                 # If there's nothing left to be decoded, it means it wasn't any value.
                 if field.optional and len(raw) == pointer:
                     field_size = 0
-
+                
                 # Check if we have enough data, otherwise we just have the partial data
                 # and we can't parse the whole structure. For this cases, we just assume
                 # nothing could be decoded.
