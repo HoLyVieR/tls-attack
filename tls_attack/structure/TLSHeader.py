@@ -2,6 +2,12 @@ from enum import *
 
 from tls_attack.structure.TLSStructure import *
 
+class TLSVersion(Enum):
+    SSLv3  = 0x0300
+    TLS10  = 0x0301
+    TLS11  = 0x0302
+    TLS12  = 0x0303
+
 class TLSContentType(Enum):
     TLSChangeCipherSpec = 20
     TLSAlert            = 21

