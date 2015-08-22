@@ -158,7 +158,7 @@ class PoodleAttack:
         if type(structure.body) == TLSHandshake:
             if type(structure.body.body) == TLSServerHello:
                 server_hello = structure.body.body
-
+                
                 if server_hello.version == TLSVersion.SSLv3.value:
                     if not key in self.attack_pool:
                         logging.warn("Vulnerable Poodle Connection detected on client '%s' connecting to '%s'." % (client_ip, server_ip))

