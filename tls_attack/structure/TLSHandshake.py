@@ -1,6 +1,7 @@
 from enum import *
 
-from tls_attack.structure.TLSStructure import *
+from tls_attack.structure.TLSStructure import TLSStructure
+from tls_attack.structure.TLSAnnotation import *
 
 class TLSHandshakeType(Enum):
     TLSHelloRequest       = 0
@@ -18,8 +19,8 @@ class TLSHandshakeType(Enum):
     TLSCertificateStatus  = 22
 
 class TLSHandshake(TLSStructure):
-    handshake_type = TLSField(size = 1, type = "int")
-    length         = TLSField(size = 3, type = "int")
+    handshake_type = TLSField(size = 1, type = "int", default = TLSAuto())
+    length         = TLSField(size = 3, type = "int", default = TLSAuto())
     body           = TLSField(
                             size = TLSFieldRef(name = "length"), 
                             type = TLSFieldRef(name = "handshake_type"),

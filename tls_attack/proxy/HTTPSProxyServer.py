@@ -6,10 +6,8 @@ import logging
 import traceback
 import threading
 
-from tls_attack.structure.TLSHeader import *
-from tls_attack.structure.TLSEmpty  import *
-from tls_attack.structure.TLSState  import *
-from tls_attack.proxy.Connection    import *
+from tls_attack.structure import *
+from tls_attack.proxy.Connection import *
 
 connection_pool = {}
 connection_handler = []
@@ -148,10 +146,10 @@ class HTTPSProxyServerHandler(socketserver.BaseRequestHandler):
                         if issubclass(type(handler_response), TLSStructure):
                             response = handler_response
                         else:
-                            logging.error("[%s] Value returned from handler must be either None or a TLSStructure. Received '%s' of type '%s'." % (connection_id, handler_response, str(type(handler_response))))
+                            logging.error("[%s] Value returned from handler must be either None or a TLSStructure. Received '%s' of type '%s'." % (connection.id, handler_response, str(type(handler_response))))
 
                     # If a callback dropped the request, stop here
-                    if type(response) == TLSEmpty:
+                    if type(response) is TLSEmpty:
                         break
 
                 # If the response was altered we send the modified content

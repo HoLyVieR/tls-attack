@@ -1,6 +1,7 @@
 from enum import *
 
-from tls_attack.structure.TLSStructure import *
+from tls_attack.structure.TLSStructure import TLSStructure
+from tls_attack.structure.TLSAnnotation import *
 
 class TLSServerHello(TLSStructure):
     version            = TLSField(size = 2,  type = "int")

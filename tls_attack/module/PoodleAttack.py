@@ -1,10 +1,7 @@
 import logging
 import threading
 
-from tls_attack.structure.TLSHeader       import *
-from tls_attack.structure.TLSHandshake    import *
-from tls_attack.structure.TLSServerHello  import *
-from tls_attack.structure.TLSEmpty        import *
+from tls_attack.structure                 import *
 from tls_attack.module.ForceRequestOracle import *
 
 class PoodleAttack:

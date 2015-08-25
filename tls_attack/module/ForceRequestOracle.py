@@ -1,8 +1,7 @@
 import logging
 import traceback
 
-from tls_attack.structure.TLSHeader import *
-from tls_attack.structure.TLSSource import *
+from tls_attack.structure import *
 
 class ForceRequestOracle:
     TLS_HISTORY_LENGTH = 20

@@ -1,6 +1,9 @@
 import struct
 import collections
 import logging
+import types
+
+from tls_attack.structure.TLSAnnotation import TLSAuto, TLSField, TLSFieldRef
 
 import tls_attack.structure
 
@@ -27,35 +30,100 @@ class OrderedMeta(type):
         return c
 
 class TLSStructure(metaclass = OrderedMeta):
+    def __init__(self, **kwargs):
+        self._state  = self._get_tls_structure_by_name("TLSState")()
+        self._source = self._get_tls_structure_by_name("TLSSource").CLIENT
+
+        # Setting the default values for every field
+        for name in self.static_attributes:
+            field = getattr(type(self), name)
+            setattr(self, name, field.default_value)
+
+        # Setting the defined value by the arguments
+        for key in kwargs:
+            value = kwargs[key]
+
+            if not key in self.static_attributes:
+                class_name = type(self).__name__
+                prop_list = ", ".join(self.static_attributes)
+                raise Exception("'%s' is not a valid property name for the structure '%s'. Must be one of : %s." % (key, class_name, prop_list))
+
+            setattr(self, key, value)
 
     # Returns the references to a TLS Structure class by it's name
-    def _get_tls_structure_by_name(self, type):
+    def _get_tls_structure_by_name(self, type_name):
         # Load on demand the module required for the decoding
-        if not hasattr(tls_attack.structure, type):
-            __import__("tls_attack.structure." + type)
+        if not hasattr(tls_attack.structure, type_name):
+            __import__("tls_attack.structure." + type_name)
 
-        # If the type is a class, we resolve it and use it's decoder
-        return getattr(getattr(tls_attack.structure, type), type)
+        value = getattr(tls_attack.structure, type_name)
+
+        if type(value) is types.ModuleType:
+            value = getattr(value, type_name)
+
+        return value
+
+    # Returns the computed value of a field for which the value was
+    # set to "auto".
+    def _evaluate_auto_field(self, field_name):
+        for name in self.static_attributes:
+            field = getattr(type(self), name)
+
+            # Resolves field size reference
+            if type(field.size) is TLSFieldRef:
+                if field.size.name == field_name:
+                    value = getattr(self, name)
+
+                    # If the length refers to an object, we need to encode it
+                    # to know it's actual length
+                    if issubclass(type(value), TLSStructure):
+                        encoded_value = value.encode(self._state, self._source)
+                        value = encoded_value
+
+                    # If the length refers to a list, the value as to be the length
+                    # of all the components
+                    if field.type_list:
+                        total_length = 0
+
+                        for element in value:
+                            if issubclass(type(element), TLSStructure):
+                                encoded_value = element.encode(self._state, self._source)
+                                total_length += len(encoded_value)
+                            else:
+                                total_length += len(element)
+
+                        return total_length
+
+                    return len(value)
+
+            if type(field.type) is TLSFieldRef:
+                if field.type.name == field_name:
+                    class_name = type(getattr(self, name)).__name__
+                    value = getattr(field.type_ref, class_name).value
+                    return value
+
+
+        return None
 
     # Serializes an object to raw bytes.
-    def _serialize_type(self, type, type_enum, type_list, type_size, state, source, obj):
+    def _serialize_type(self, type_name, type_enum, type_list, type_size, state, source, obj):
         result = b""
 
-        if type == "int":
+        if type_name == "int":
             # Primitive type encoder for int
             # Integer value are encoded as unsigned big endian number
             result = obj.to_bytes(type_size, byteorder='big')
 
-        elif type == "bytes":
+        elif type_name == "bytes":
             # Primitive type encoder for bytes
             result = obj
 
-        elif type == "enum":
+        elif type_name == "enum":
             # Primitive type decoder to map integer value to enumeration
             result = obj.value.to_bytes(type_size, byteorder='big')
 
         else:
-            type = self._get_tls_structure_by_name(type)
+            type_name = self._get_tls_structure_by_name(type_name)
 
             if type_list:
                 result = b""
@@ -68,7 +136,7 @@ class TLSStructure(metaclass = OrderedMeta):
 
         # Safety check to make sure we are properly encoding the value.
         # For the remaining size (undecoded value) we ignore this.
-        if len(result) != type_size and type_size != TLSField.REMAINING_SIZE:
+        if not type(type_size) is TLSAuto and len(result) != type_size and type_size != TLSField.REMAINING_SIZE:
             logging.warning( \
                 "Output length doesn't match the requested length. Expected : %d Given : %d " + \
                 "Object : %s", type_size, len(result), str(obj) \
@@ -119,8 +187,14 @@ class TLSStructure(metaclass = OrderedMeta):
         return result
 
     # Decodes the raw bytes provided into the current TLSStructure.
-    def decode(self, raw, state, source):
+    def decode(self, raw, state = None, source = None):
         pointer = 0
+
+        state  = self._state  if state  is None else state
+        source = self._source if source is None else source
+
+        self._state  = state
+        self._source = source
 
         for name in self.static_attributes:
             field = getattr(type(self), name)
@@ -170,8 +244,14 @@ class TLSStructure(metaclass = OrderedMeta):
         return pointer
 
     # Encodes the current TLS Structure into raw bytes
-    def encode(self, state, source):
+    def encode(self, state = None, source = None):
         result = b""
+
+        state  = self._state  if state  is None else state
+        source = self._source if source is None else source
+
+        self._state = state
+        self._source = source
 
         for name in self.static_attributes:
             field = getattr(type(self), name)
@@ -183,8 +263,8 @@ class TLSStructure(metaclass = OrderedMeta):
                 field_value    = getattr(self, name)
                 field_type_ref = field.type_ref
 
-                if type(field_value) is TLSField:
-                    logging.error("Field value '%s' is of type 'TLSField'. This means no value was assigned to it !" % name) 
+                if type(field_value) is TLSAuto:
+                    field_value = self._evaluate_auto_field(name)
 
                 # When the state of the connection is encrypted, the encryptable field
                 # should all be considered as encrypted data.
@@ -201,7 +281,10 @@ class TLSStructure(metaclass = OrderedMeta):
                 # of the TLS specification. The type reference is an enum
                 # class that tells which identifier maps to which structure.
                 if field_type_ref:
-                    field_type = field_type_ref(field_type).name
+                    if type(field_type) is TLSAuto:
+                        field_type = type(field_value).__name__
+                    else:
+                        field_type = field_type_ref(field_type).name
 
                 if not field_size == TLSField.NONE:
                     result += self._serialize_type(field_type, field.type_enum, field.type_list, field_size, state, source, field_value)
@@ -241,38 +324,11 @@ class TLSStructure(metaclass = OrderedMeta):
 
                 result += "\n" + " " * 4 + "]\n"
             else:
+                if type(field_value) is TLSAuto:
+                    field_value_str = str(self._evaluate_auto_field(name))
+
                 result += " "*4 + name + " = " + field_value_str + "\n"
 
         result += "}"
         return result
 
-class TLSField:
-
-    # Constant for undecoded value that will return the remaining data
-    REMAINING_SIZE = -1
-    NONE = 0
-
-    def __init__(self, size, type, type_ref = None, type_list = False, type_enum = None, encryptable = False, optional = False):
-        self.size = TLSFieldValue(size) if not callable(getattr(size, "value", None)) else size
-        self.type = TLSFieldValue(type) if not callable(getattr(type, "value", None)) else type
-        self.type_ref = type_ref
-        self.type_list = type_list
-        self.type_enum = type_enum
-        self.value = None
-        self.encryptable = encryptable
-        self.optional = optional
-
-class TLSFieldValue:
-    def __init__(self, value):
-        self._value = value
-
-    def value(self, obj):
-        return self._value
-
-class TLSFieldRef:
-    def __init__(self, name):
-        self.name = name
-
-    def value(self, obj):
-        ref_value = getattr(obj, self.name)
-        return ref_value

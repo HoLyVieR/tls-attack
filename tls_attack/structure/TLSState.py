@@ -1,12 +1,9 @@
 import logging
 
-from tls_attack.structure.TLSCipherSuiteStruct import *
-from tls_attack.structure.TLSCompressionStruct import *
-from tls_attack.structure.TLSHeader import *
-from tls_attack.structure.TLSSource import *
-from tls_attack.structure.TLSChangeCipherSpec import *
-from tls_attack.structure.TLSHandshake import *
-from tls_attack.structure.TLSServerHello import *
+from tls_attack.structure.TLSStructure import TLSStructure
+from tls_attack.structure.TLSAnnotation import *
+
+from tls_attack.structure import *
 
 class TLSState:
     def __init__(self):

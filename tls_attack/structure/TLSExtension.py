@@ -1,6 +1,7 @@
 from enum import *
 
-from tls_attack.structure.TLSStructure import *
+from tls_attack.structure.TLSStructure import TLSStructure
+from tls_attack.structure.TLSAnnotation import *
 
 class TLSExtensionType(Enum):
     SERVER_NAME = 0
@@ -33,8 +34,9 @@ class TLSExtensionType(Enum):
 
 class TLSExtension(TLSStructure):
     extension_type        = TLSField(size = 2, type = "enum", type_enum = TLSExtensionType)
-    extension_data_length = TLSField(size = 2, type = "int")
+    extension_data_length = TLSField(size = 2, type = "int", default = TLSAuto())
     extension_data        = TLSField(
                                 size = TLSFieldRef(name = "extension_data_length"), 
-                                type = "bytes"
+                                type = "bytes",
+                                default = b""
                             )

